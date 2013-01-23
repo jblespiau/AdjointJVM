@@ -14,13 +14,22 @@ import org.apache.commons.math3.optimization.general.{ConjugateGradientFormula, 
 import org.wsj.Adjoint.Control
 import org.ejml.simple.SimpleMatrix
 
-case class SimpleState(state: Double) extends SystemState {
-  def getState = state
-}
+
 
 
 class AdjointSuite extends FunSuite with ShouldMatchers {
+
+  // simple state to use in testing simple adjoint
+  case class SimpleState(state: Double) extends SystemState {
+    def getState = state
+  }
+
+  // easy to solve by hand system, init a bunch of u values at random, and show they converge for adjoint formulation
+  // min x^2 + u^2
+  // subject to: 3x + 2u = 3
+
   class SimpleAdjoint extends Adjoint[SimpleState] {
+
     val optimizer = new NonLinearConjugateGradientOptimizer(ConjugateGradientFormula.POLAK_RIBIERE)
 
     def dhdx(state: SimpleState, control: Control) = SimpleMatrix.diag(3)
