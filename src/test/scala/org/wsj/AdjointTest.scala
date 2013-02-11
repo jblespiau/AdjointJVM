@@ -12,10 +12,8 @@ import org.scalatest._
 import matchers.ShouldMatchers
 import org.apache.commons.math3.optimization.general.{ConjugateGradientFormula, NonLinearConjugateGradientOptimizer}
 import org.wsj.Adjoint.Control
-import org.ejml.simple.SimpleMatrix
-
-
-
+import cern.colt.matrix.tdouble.impl.{DenseDoubleMatrix1D, SparseDoubleMatrix1D, SparseDoubleMatrix2D}
+import org.apache.commons.math3.optimization.DifferentiableMultivariateOptimizer
 
 class AdjointSuite extends FunSuite with ShouldMatchers {
 
@@ -28,14 +26,19 @@ class AdjointSuite extends FunSuite with ShouldMatchers {
   // min x^2 + u^2
   // subject to: 3x + 2u = 3
 
-  class SimpleAdjoint extends Adjoint[SimpleState] {
+  class SimpleAdjoint(val optimizer: DifferentiableMultivariateOptimizer = {
+    new NonLinearConjugateGradientOptimizer(ConjugateGradientFormula.POLAK_RIBIERE)
+  } )
+    extends Adjoint[SimpleState] {
 
-    val optimizer = new NonLinearConjugateGradientOptimizer(ConjugateGradientFormula.POLAK_RIBIERE)
+    override def dhdxT(state: SimpleState, control: Control) = Some(new AdjointMatrix(Array(Array(3.0))))
+    def djdx(state: SimpleState, control: Control) = new SparseAdjointVector(Array(2.0 * state.getState))
+    def dhdu(state: SimpleState, control: Control) = Some(new AdjointMatrix(Array(Array(2.0))))
+    def djdu(state: SimpleState, control: Control) = new DenseDoubleMatrix1D(Array(2.0 * control(0)))
 
-    def dhdx(state: SimpleState, control: Control) = SimpleMatrix.diag(3)
-    def djdx(state: SimpleState, control: Control) = SimpleMatrix.diag(2 * state.getState)
-    def dhdu(state: SimpleState, control: Control) = SimpleMatrix.diag(2)
-    def djdu(state: SimpleState, control: Control) = SimpleMatrix.diag(2 * control(0))
+
+    // where the physics comes in, must be implemented
+    def dhdx(state: AdjointSuite.this.type#SimpleState, control: Adjoint.Control) = None
 
     def forwardSimulate(control: Adjoint.Control) = SimpleState((3 - 2 * control(0)) / 3.0)
 
@@ -48,16 +51,22 @@ class AdjointSuite extends FunSuite with ShouldMatchers {
   }
 
   test("see if SimpleAdjoint works as it should") {
-    val simpleAdjoint = new SimpleAdjoint
-    val tolerance = .0001
-    val ustar =  6.0 / 13
-    val xstar = 9.0 / 13
-    for (i <- 1 to 10) {
-      val u0: Control = Array(5*math.random)
-      val uCheck= simpleAdjoint.solve(u0)
-      uCheck(0) should be (ustar plusOrMinus tolerance)
-      simpleAdjoint.forwardSimulate(uCheck).getState should be (xstar plusOrMinus tolerance)
-      println("next.....")
+    val optimizers = List(
+      new NonLinearConjugateGradientOptimizer(ConjugateGradientFormula.POLAK_RIBIERE),
+      new IpOptAdjointOptimizer
+    )
+    for (optimizer <- optimizers) {
+      val simpleAdjoint = new SimpleAdjoint
+      val tolerance = .0001
+      val ustar =  6.0 / 13
+      val xstar = 9.0 / 13
+      for (i <- 1 to 10) {
+        val u0: Control = Array(5*math.random)
+        val uCheck= simpleAdjoint.solve(u0)
+        uCheck(0) should be (ustar plusOrMinus tolerance)
+        simpleAdjoint.forwardSimulate(uCheck).getState should be (xstar plusOrMinus tolerance)
+        println("next.....")
+      }
     }
   }
 }

@@ -9,3 +9,5 @@ libraryDependencies += "com.googlecode.efficient-java-matrix-library" % "ejml" %
 libraryDependencies += "org.apache.commons" % "commons-math3" % "3.0"
 
 libraryDependencies += "org.scalatest" %% "scalatest" % "1.6.1" % "test"
+
+libraryDependencies += "net.sourceforge.parallelcolt" % "parallelcolt" % "0.10.0"
