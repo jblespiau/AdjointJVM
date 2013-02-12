@@ -22,7 +22,15 @@ case class FreewayJunction(inLink: Option[FreewayLink],
                            outLink: Option[FreewayLink],
                            onRamp: Option[OnRamp],
                            offRamp: Option[OffRamp])
-  extends Junction[FreewayLink](Seq(inLink).flatten, Seq(outLink).flatten)
+  extends Junction[FreewayLink] {
+  def inLinks = Set(inLink).flatten
+  def outLinks = Set(outLink).flatten
+}
+//case class FreewayJunction(inLink: Option[FreewayLink],
+//                           outLink: Option[FreewayLink],
+//                           onRamp: Option[OnRamp],
+//                           offRamp: Option[OffRamp])
+//  extends SimpleJunction[FreewayLink](Seq(inLink).flatten, Seq(outLink).flatten)
 
 // special cases for freewayJunctions
 case class FreewaySource(link: FreewayLink,
@@ -35,9 +43,7 @@ case class FreewaySink(link: FreewayLink,
 
 
 // straightaway network of freeway links
-trait Freeway extends Network[FreewayLink] {
-  type NetworkJunction = FreewayJunction
-}
+trait Freeway extends Network[FreewayLink, FreewayJunction]
 
 
 case class FreewayLink(length: Double,
@@ -74,44 +80,4 @@ case class SimpleFreeway(fwLinks: Seq[SimpleFreewayLink]) extends Freeway {
       }
     }}
   }
-}
-
-// instantiations of IC and BC for ramp metering specifically
-case class FreewayBC(demand: Double, splitRatio: Double) extends BoundaryCondition
-case class FreewayIC(linkCount: Double, rampCount: Double) extends InitialCondition
-
-// further specifies what's allowed for RampMetering
-trait RampMeteringPolicyMaker extends BCICPolicyMaker[SimpleFreewayLink] {
-  type AppliedBoundaryCondition = FreewayBC
-  type AppliedInitialCondition = FreewayIC
-  type AppliedControl = MaxRampFlux
-  type AppliedControlEntity = OnRamp
-  type AppliedBCEntity = SimpleFreewayLink
-  type AppliedICEntity = SimpleFreewayLink
-
-  override val network: SimpleFreeway
-  val N = network.links.size
-  val orderedRamps = network.fwLinks.map {_.onRamp}.flatten
-  val nOnramps = orderedRamps.length
-  val T = boundaryConditionPolicy.length
-
-  val optimizer = new IpOptAdjointOptimizer
-
-  def initialControl: ProfilePolicy[MaxRampFlux, OnRamp] = {
-    (for (_ <- 1 to T) yield {
-      orderedRamps.zip(Array.fill(nOnramps)(MaxRampFlux(0.0))).toMap
-    }).toArray
-  }
-
-  def uToVector(u: ProfilePolicy[MaxRampFlux, OnRamp]): Adjoint.Control = {
-    (u.flatMap {
-      prof => orderedRamps.map {ramp => prof(ramp).flux}
-    }).toArray
-  }
-
-  def vectorToU(vector: Adjoint.Control): ProfilePolicy[MaxRampFlux, OnRamp]  = {
-    (vector.grouped(nOnramps).map{prof => orderedRamps.zip(prof.map{MaxRampFlux(_)}).toMap}).toArray
-  }
-
-  def initialUVector = uToVector(initialControl)
 }

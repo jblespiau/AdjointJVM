@@ -2,7 +2,7 @@ package org.wsj
 
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
-import org.wsj.PolicyMaker._
+import PolicyMaker._
 /**
  * Created with IntelliJ IDEA.
  * User: jdr
@@ -18,17 +18,13 @@ class PolicyMakerTest extends FunSuite with ShouldMatchers {
   // feed it all the necessary params, then it can give dumb policy
   // eliminates links w/ no onramps, and just gives a value of 1 for each entity
   class DumbRampPolicyMaker(val freeway: SimpleFreeway,
-                            val boundaryConditionPolicy: ProfilePolicy[FreewayBC, FreewayLink],
-                            val initialConditionPolicy: Profile[FreewayIC, FreewayLink]) extends RampMeteringPolicyMaker {
+                            val boundaryConditionPolicy: ProfilePolicy[FreewayBC, SimpleFreewayLink],
+                            val initialConditionPolicy: Profile[FreewayIC, SimpleFreewayLink]) extends RampMeteringPolicyMaker {
     override val network = freeway
-    type AppliedBCEntity = FreewayLink
-    type AppliedICEntity = FreewayLink
 
-    def givePolicy(network: Network[FreewayLink],
-                   bc: ProfilePolicy[FreewayBC, FreewayLink],
-                   ic: Profile[FreewayIC, FreewayLink]) = {
-      Seq(freeway.fwLinks.map {_.onRamp}.flatten.map {_ -> MaxRampFlux(1)}.toMap)
-    }
+    def givePolicy(network: Freeway,
+                   bc: PolicyMaker.ProfilePolicy[FreewayBC, SimpleFreewayLink],
+                   ic: PolicyMaker.Profile[FreewayIC, SimpleFreewayLink]) = Seq(freeway.fwLinks.map {_.onRamp}.flatten.map {_ -> MaxRampFlux(1)}.toMap)
   }
 
   test("the dumb test maker compiles and creates a proper profile policy") {
@@ -41,8 +37,8 @@ class PolicyMakerTest extends FunSuite with ShouldMatchers {
     // simple ic's and bc's
     val bc = FreewayBC(1,1)
     val ic = FreewayIC(1,1)
-    val bcPolicy: ProfilePolicy[FreewayBC, FreewayLink] = Seq(freeway.links.map {link => link -> bc}.toMap)
-    val icPolicy: Profile[FreewayIC, FreewayLink] = freeway.links.map {link => link -> ic}.toMap
+    val bcPolicy: ProfilePolicy[FreewayBC, SimpleFreewayLink] = Seq(freeway.fwLinks.map {link => link -> bc}.toMap)
+    val icPolicy: Profile[FreewayIC, SimpleFreewayLink] = freeway.fwLinks.map {link => link -> ic}.toMap
 
     // construct maker, then policy, and check sln for sanity
     val policyMaker = new DumbRampPolicyMaker(freeway, bcPolicy, icPolicy)

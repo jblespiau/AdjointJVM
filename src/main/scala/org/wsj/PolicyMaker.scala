@@ -35,7 +35,7 @@ trait InitialCondition // ditto
 trait ICEntity // ditto
 trait BCEntity // ditto
 
-trait BCICPolicyMaker[T<:Link] extends PolicyMaker {
+trait BCICPolicyMaker[L<:Link, J<:Junction[L], N<:Network[L,J]] extends PolicyMaker {
   // policies that can be applied to networks
   // information about IC's and BC's is passed in
   // rather than no argument givePolicy
@@ -44,10 +44,10 @@ trait BCICPolicyMaker[T<:Link] extends PolicyMaker {
   type AppliedInitialCondition <: InitialCondition
   type AppliedBCEntity <: BCEntity
   type AppliedICEntity <: ICEntity
-  val network: Network[T]
+  val network: N
   val boundaryConditionPolicy: ProfilePolicy[AppliedBoundaryCondition, AppliedBCEntity]
   val initialConditionPolicy: Profile[AppliedInitialCondition, AppliedICEntity]
-  def givePolicy(network: Network[T],
+  def givePolicy(network: N,
                  bc: ProfilePolicy[AppliedBoundaryCondition, AppliedBCEntity],
                  ic: Profile[AppliedInitialCondition, AppliedICEntity]): ProfilePolicy[AppliedControl, AppliedControlEntity]
   def givePolicy = givePolicy(network, boundaryConditionPolicy, initialConditionPolicy) // straight forward implementation

@@ -1,10 +1,8 @@
 package org.wsj
 
-import org.ejml.simple.SimpleMatrix
 import org.apache.commons.math3.optimization.{GoalType, DifferentiableMultivariateOptimizer}
 import org.apache.commons.math3.analysis.{MultivariateVectorFunction, DifferentiableMultivariateFunction}
-import org.wsj.PolicyMaker._
-import cern.colt.matrix.tdouble.impl.{SparseCCDoubleMatrix2D, DenseDoubleMatrix1D, SparseDoubleMatrix1D, SparseDoubleMatrix2D}
+import cern.colt.matrix.tdouble.impl.{SparseCCDoubleMatrix2D, SparseDoubleMatrix1D}
 import cern.colt.matrix.tdouble.algo.{DenseDoubleAlgebra, SparseDoubleAlgebra}
 import cern.colt.matrix.tdouble.{DoubleMatrix2D, DoubleMatrix1D}
 import cern.jet.math.tdouble.DoubleFunctions
@@ -24,18 +22,17 @@ trait SystemState {
 
 object Adjoint {
   type Control = Array[Double]
-  type ControlPolicy = ProfilePolicy[MaxRampFlux, SimpleFreewayLink]
+  type AdjointMatrix = SparseCCDoubleMatrix2D
+  type AdjointVector = DoubleMatrix1D
+  type SparseAdjointVector = SparseDoubleMatrix1D
 
-  // not useful right now, thinking ahead for how it interfaces with policy maker
-  implicit def controlPolicyToControl(controlPolicy: ControlPolicy ): Control = {
-    controlPolicy.flatMap {_.toList.sortBy {_._1.id}.map {_._2.flux}}.toArray
-  }
+
   val algebra = new SparseDoubleAlgebra()
   val dAlg = new DenseDoubleAlgebra()
 }
-import Adjoint.Control
 
 
+import Adjoint._
 
 trait Adjoint[T<:SystemState] {
   type AdjointMatrix = SparseCCDoubleMatrix2D

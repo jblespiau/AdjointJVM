@@ -11,8 +11,8 @@ package org.wsj
 import org.scalatest._
 import matchers.ShouldMatchers
 import org.apache.commons.math3.optimization.general.{ConjugateGradientFormula, NonLinearConjugateGradientOptimizer}
-import org.wsj.Adjoint.Control
-import cern.colt.matrix.tdouble.impl.{DenseDoubleMatrix1D, SparseDoubleMatrix1D, SparseDoubleMatrix2D}
+import Adjoint._
+import cern.colt.matrix.tdouble.impl.DenseDoubleMatrix1D
 import org.apache.commons.math3.optimization.DifferentiableMultivariateOptimizer
 
 class AdjointSuite extends FunSuite with ShouldMatchers {
@@ -42,7 +42,7 @@ class AdjointSuite extends FunSuite with ShouldMatchers {
 
     def forwardSimulate(control: Adjoint.Control) = SimpleState((3 - 2 * control(0)) / 3.0)
 
-    def objective(state: SimpleState, control: Adjoint.Control) = {
+    def objective(state: SimpleState, control: Control) = {
 
       val x = state.getState
       val u = control(0)
