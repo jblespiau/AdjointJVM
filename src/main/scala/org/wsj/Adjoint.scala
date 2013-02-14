@@ -44,7 +44,7 @@ trait Adjoint[T<:SystemState] {
 
 
   // generic optimizer, can sub in and out
-  val optimizer: DifferentiableMultivariateOptimizer
+  var optimizer: DifferentiableMultivariateOptimizer
 
 
   // where the physics comes in, must be implemented
@@ -59,7 +59,7 @@ trait Adjoint[T<:SystemState] {
   def getDhduT(state: T, control: Control) = {
     getTransposeOrFallback(state, control, dhduT, dhdu)
   }
-  def dhduT(state: T, control: Control) = None
+  def dhduT(state: T, control: Control): Option[AdjointMatrix] = None
 
   // either let the user specify the transpose explicitly or the user specifies the regular one, and we transpose,
   // may be expensive not to go straight to transpose

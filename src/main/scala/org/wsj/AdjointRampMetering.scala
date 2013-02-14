@@ -8,12 +8,18 @@ package org.wsj
  * To change this template use File | Settings | File Templates.
  */
 import PolicyMaker._
+import cern.colt.matrix.tdouble.impl.SparseDoubleMatrix1D
+import org.apache.commons.math3.optimization.general.{ConjugateGradientFormula, NonLinearConjugateGradientOptimizer}
+import org.apache.commons.math3.optimization.DifferentiableMultivariateOptimizer
 
 
 object AdjointRampMetering {
   type DensityProfile =  ProfilePolicy[Double, SimpleFreewayLink]
+  type FlowProfile =  ProfilePolicy[Double, SimpleFreewayLink]
+  type RampFlowProfile = ProfilePolicy[Double, OnRamp]
   type QueueProfile = ProfilePolicy[Double, OnRamp]
 }
+
 
 
 import AdjointRampMetering._
@@ -24,7 +30,14 @@ case class FreewayBC(demand: Double, splitRatio: Double) extends BoundaryConditi
 case class FreewayIC(linkCount: Double, rampCount: Double) extends InitialCondition
 
 abstract class SimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimpleFreeway(_fwLinks) {
-  def simulate(u: Adjoint.Control, ic: FreewayIC, bc: FreewayBC): AdjointRampMeteringState
+  def simulate(u: Adjoint.Control, bc: ProfilePolicy[FreewayBC, SimpleFreewayLink], ic: Profile[FreewayIC, SimpleFreewayLink]): AdjointRampMeteringState
+
+  lazy val vList = fwLinks.map{_.fd.v}
+  lazy val wList = fwLinks.map{_.fd.w}
+  lazy val fMaxList = fwLinks.map{_.fd.fMax}
+  lazy val pList = fwLinks.map{_.onRamp.get.priority}
+  lazy val rMaxList = fwLinks.map{_.onRamp.get.maxFlux}
+  lazy val rhoMaxList = fwLinks.map{_.fd.rhoMax}
 }
 
 // further specifies what's allowed for RampMetering
@@ -35,13 +48,15 @@ trait RampMeteringPolicyMaker extends BCICPolicyMaker[FreewayLink, FreewayJuncti
   type AppliedControlEntity = OnRamp
   type AppliedBCEntity = SimpleFreewayLink
   type AppliedICEntity = SimpleFreewayLink
-  val freeway: SimpleFreeway
-  val N = freeway.links.size
+  val freeway: SimulatedFreeway
+  val network = freeway
+  val links = freeway.fwLinks
+  val N = links.length
   val orderedRamps = freeway.fwLinks.map {_.onRamp}.flatten
   val nOnramps = orderedRamps.length
-  val T = boundaryConditionPolicy.length
+  lazy val T = boundaryConditionPolicy.length
 
-  val optimizer = new IpOptAdjointOptimizer
+  var optimizer: DifferentiableMultivariateOptimizer = new NonLinearConjugateGradientOptimizer(ConjugateGradientFormula.POLAK_RIBIERE)
 
   def initialControl: ProfilePolicy[MaxRampFlux, OnRamp] = {
     (for (_ <- 1 to T) yield {
@@ -65,12 +80,32 @@ trait RampMeteringPolicyMaker extends BCICPolicyMaker[FreewayLink, FreewayJuncti
   def initialUVector = uToVector(initialControl)
 }
 
-abstract class AdjointRampMetering(val _boundaryConditionPolicy: ProfilePolicy[FreewayBC, SimpleFreewayLink],
+class AdjointRampMetering( val freeway: SimulatedFreeway,
+                                    val _boundaryConditionPolicy: ProfilePolicy[FreewayBC, SimpleFreewayLink],
                           val _initialConditionPolicy: Profile[FreewayIC,SimpleFreewayLink])
   extends RampMeteringPolicyMaker with Adjoint[AdjointRampMeteringState] {
 
+
   val boundaryConditionPolicy = _boundaryConditionPolicy
   val initialConditionPolicy = _initialConditionPolicy
+  val nControl = N*T
+  val nState = N*(T+1)*8
+
+  val dt = 1 // TODO: dt hack
+
+  lazy val linkLengths = freeway.fwLinks.map{_.length}
+
+  // optimized, this is constant for all iterations
+  lazy val DJDX = {
+    val sln = new SparseDoubleMatrix1D(nState)
+    for (t <- 0 until T+1) {
+      for (n <- 0 until N) {
+        sln.setQuick(t*8*N + N*0 + n,linkLengths(n) )
+        sln.setQuick(t*8*N + N*1 + n, 1 )
+      }
+    }
+    sln
+  }
 
   def givePolicy(network: Freeway,
                  bc: ProfilePolicy[FreewayBC, SimpleFreewayLink],
@@ -78,8 +113,193 @@ abstract class AdjointRampMetering(val _boundaryConditionPolicy: ProfilePolicy[F
     vectorToU(solve(initialUVector))
   }
 
+  def forwardSimulate(control: Adjoint.Control) = freeway.simulate(control, boundaryConditionPolicy, initialConditionPolicy)
+
+  def objective(state: AdjointRampMeteringState, control: Adjoint.Control) = {
+    var sum = 0.0
+    state.getState.density.foreach{prof => prof.foreach{case (link, density) => sum+=link.length*density}}
+    state.getState.queue.foreach{prof => prof.foreach{case (ramp, queue) => sum+=queue}}
+    // TODO: add barrier functions
+    sum
+  }
+
+  def djdu(state: AdjointRampMeteringState, control: Adjoint.Control) = {
+    // TODO: Add barrier functions
+    new SparseDoubleMatrix1D(nControl)
+  }
+
+  def djdx(state: AdjointRampMeteringState, control: Adjoint.Control) = {
+    DJDX
+  }
+
+  def dhdu(state: AdjointRampMeteringState, control: Adjoint.Control) = None
+
+  override def dhduT(state: AdjointRampMeteringState, control: Adjoint.Control) = {
+    val sln = new AdjointMatrix(nControl, nState)
+    for (n <- 0 until N) {
+      val link = freeway.fwLinks(n)
+      val ramp = link.onRamp.get
+      val rMax = ramp.maxFlux
+      for (t <- 0 until T) {
+        // TODO: this assumes that all ramps are present...
+        val l = state.queue(t)(ramp)
+        val uInd = t*N + n
+        val u = control(uInd)
+        if (u < math.min( l / dt, rMax))
+          sln.setQuick(uInd, t*N*8 + N*5 + n, -1.0)
+      }
+    }
+    Some(sln)
+  }
+
+  override def dhdxT(state: AdjointRampMeteringState, control: Adjoint.Control) = {
+    val sln = new AdjointMatrix(nState, nState)
+    var hi = -1
+    val bc = boundaryConditionPolicy
+
+    for (i <- 0 until sln.columns())
+      sln.setQuick(i, i , 1.0)
+    for (k <- 0 until T+1) {
+      val kk = math.min(k, T-1) // hack from matlab code for not all u values being specified, but not mattering
+      // TODO: investigate kk situation
+      for (c <- 0 until 8) {
+        for (i <- 0 until N) {
+          hi+=1
+          c match {
+            case 0 => {
+              if (k > 0) {
+                sln.setQuick(N*8*(k - 1) + N*(1) + i, hi, -1)
+                val l = linkLengths(i)
+                sln.setQuick(N*8*(k - 1) + N*(6) + i, hi, -dt / l)
+                sln.setQuick(N*8*(k - 1) + N*(7) + i, hi, dt / l)
+              }
+            }
+             case 1 => {
+               if (k > 0) {
+                 sln.setQuick(N*8*(k - 1) + N*(2) + i, hi, -1)
+                 sln.setQuick(N*8*(k - 1) + N*(8) + i, hi, dt)
+              }
+            }
+            case 2 => {
+              val rho = state.density(k)(links(i))
+              val v = freeway.vList(i)
+              val F = freeway.fMaxList(i)
+              if (rho * v < F)
+                sln.setQuick(N*8*(k) + N*(0) + i, hi, -v)
+            }
+            case 3 => {
+              val rho = state.density(k)(links(i))
+              val w = freeway.wList(i)
+              val rhoMax = freeway.rhoMaxList(i)
+              val F = freeway.fMaxList(i)
+              if (rhoMax - rho < F)
+                sln.setQuick(N*8*(k) + N*(0) + i, hi, w)
+            }
+            case 4 => {
+              val l = state.queue(k)(orderedRamps(i))
+              val rMax = freeway.rMaxList(i)
+              val u = control(kk*N + i)
+              if ( l / dt <= math.min(u, rMax))
+                sln.setQuick(N*8*(k) + N*(1) + i, hi, -1 / dt)
+            }
+            case 5 => {
+              // TODO: make ramp demand and supply part of the state
+              val sig = {
+                val rho = state.density(kk)(links(i))
+                val w = freeway.wList(i)
+                val rhoMax = freeway.rhoMaxList(i)
+                w*(rhoMax - rho)
+              }
+              val d = {
+                val r = freeway.rMaxList(i)
+                val l = state.queue(kk)(orderedRamps(i))
+                val u = control(kk*N + i)
+                math.min(r, math.min(l/dt, u))
+              }
+              i match {
+                case 0 => {
+                  if (d < sig)
+                    sln.setQuick(N*8*(k) + N*(4) + i, hi, -1)
+                  else
+                    sln.setQuick(N*8*(k) + N*(3) + i, hi, -1)
+                }
+                case _ => {
+                  val beta = bc(kk)(links(i)).splitRatio
+                  val del = {
+                    val v = freeway.vList(i-1)
+                    val rho = state.density(kk)(links(i-1))
+                    v * rho
+                  }
+                  if (del*beta + d < sig) {
+                    sln.setQuick(N*8*(k) + N*(2) + i-1, hi, -beta)
+                    sln.setQuick(N*8*(k) + N*(4) + i, hi, -1)
+                  }
+                  else
+                    sln.setQuick(N*8*(k) + N*(3) + i, hi, -1)
+                }
+              }
+            }
+            case 6 => {
+              if (i == N-1)
+                sln.setQuick(N*8*(k) + N*(2) + i, hi, -1)
+              else {
+                val beta = bc(kk)(links(i+1)).splitRatio
+                val del = {
+                  val v = freeway.vList(i)
+                  val rho = state.density(kk)(links(i))
+                  v * rho
+                }
+                val sig = {
+                  val rho = state.density(kk)(links(i+1))
+                  val w = freeway.wList(i+1)
+                  val rhoMax = freeway.rhoMaxList(i+1)
+                  w*(rhoMax - rho)
+                }
+                val d = {
+                  val r = freeway.rMaxList(i+1)
+                  val l = state.queue(kk)(orderedRamps(i+1))
+                  val u = control(kk*N + i+1)
+                  math.min(r, math.min(l/dt, u))
+                }
+                val p = freeway.pList(i+1)
+                val fIn = (state.fluxIn.get).apply(kk)(links(i+1))
+                if (del*beta + d <= sig || fIn * p / beta >= del)
+                  sln.setQuick(N*8*(k) + N*(2) + i, hi, -1)
+                else if (fIn * ( 1- p) >= d) {
+                  sln.setQuick(N*8*(k) + N*(5) + i+1, hi, -1/beta)
+                  sln.setQuick(N*8*(k) + N*(4) + i+1, hi, 1/ beta)
+                }
+                else
+                  sln.setQuick(N*8*(k) + N*(3) + i+1, hi, -1)
+              }
+            }
+            case 7 => {
+              sln.setQuick(N*8*(k) + N*(5) + i, hi, -1)
+              if (i > 1)
+                sln.setQuick(N*8*(k) + N*(6) + i-1, hi, bc(kk)(links(i)).splitRatio)
+            }
+          }
+        }
+      }
+    }
+    Some(sln)
+  }
+
+  // where the physics comes in, must be implemented
+  def dhdx(state: AdjointRampMeteringState, control: Adjoint.Control) = None
+
+
 }
-case class AdjointRampMeteringState(density: DensityProfile, queue: QueueProfile) extends SystemState {
+
+case class AdjointRampMeteringState(density: DensityProfile,
+                                    queue: QueueProfile,
+                                    demand: Option[FlowProfile] = None,
+                                    supply: Option[FlowProfile] = None,
+                                    fluxIn: Option[FlowProfile] = None,
+                                    fluxOut: Option[FlowProfile] = None,
+                                    rampDemand: Option[RampFlowProfile] = None,
+                                    rampFlux: Option[RampFlowProfile] = None
+                                     ) extends SystemState {
   def getState = this
 }
 

@@ -11,3 +11,5 @@ libraryDependencies += "org.apache.commons" % "commons-math3" % "3.0"
 libraryDependencies += "org.scalatest" %% "scalatest" % "1.6.1" % "test"
 
 libraryDependencies += "net.sourceforge.parallelcolt" % "parallelcolt" % "0.10.0"
+
+libraryDependencies += "com.assembla.scala-incubator" % "graph-core_2.10" % "1.6.1"

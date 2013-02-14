@@ -26,7 +26,7 @@ class AdjointSuite extends FunSuite with ShouldMatchers {
   // min x^2 + u^2
   // subject to: 3x + 2u = 3
 
-  class SimpleAdjoint(val optimizer: DifferentiableMultivariateOptimizer = {
+  class SimpleAdjoint(var optimizer: DifferentiableMultivariateOptimizer = {
     new NonLinearConjugateGradientOptimizer(ConjugateGradientFormula.POLAK_RIBIERE)
   } )
     extends Adjoint[SimpleState] {
@@ -52,11 +52,11 @@ class AdjointSuite extends FunSuite with ShouldMatchers {
 
   test("see if SimpleAdjoint works as it should") {
     val optimizers = List(
-      new NonLinearConjugateGradientOptimizer(ConjugateGradientFormula.POLAK_RIBIERE),
-      new IpOptAdjointOptimizer
+      // new IpOptAdjointOptimizer,
+      new NonLinearConjugateGradientOptimizer(ConjugateGradientFormula.POLAK_RIBIERE)
     )
     for (optimizer <- optimizers) {
-      val simpleAdjoint = new SimpleAdjoint
+      val simpleAdjoint = new SimpleAdjoint(optimizer)
       val tolerance = .0001
       val ustar =  6.0 / 13
       val xstar = 9.0 / 13

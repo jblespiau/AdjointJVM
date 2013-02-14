@@ -11,7 +11,10 @@ import org.wsj.PolicyMaker._
  */
 
 // standard triangular diagram
-case class FundamentalDiagram(v: Double, fMax: Double, rhoMax: Double)
+case class FundamentalDiagram(v: Double, fMax: Double, rhoMax: Double)  {
+  lazy val rhoCrit = fMax / v
+  lazy val w = fMax / (rhoMax - rhoCrit)
+}
 
 // can be viewed as a simple link
 case class OnRamp(maxLength: Double, maxFlux: Double, priority: Double) extends Link with ControlEntity
