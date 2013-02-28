@@ -85,7 +85,7 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
                           val _initialConditionPolicy: Profile[FreewayIC,SimpleFreewayLink])
   extends RampMeteringPolicyMaker with Adjoint[AdjointRampMeteringState] {
 
-  val R = .001 // tuning parameter
+  var R = .001 // tuning parameter
 
 
   val boundaryConditionPolicy = _boundaryConditionPolicy
