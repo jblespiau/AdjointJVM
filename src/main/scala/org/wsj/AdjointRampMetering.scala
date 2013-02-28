@@ -21,7 +21,6 @@ object AdjointRampMetering {
 }
 
 
-
 import AdjointRampMetering._
 
 
@@ -91,7 +90,7 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
   val nControl = N*T
   val nState = N*(T+1)*8
 
-  val dt = 1 // TODO: dt hack
+  val dt: Double = 1 // TODO: dt hack
 
   lazy val linkLengths = freeway.fwLinks.map{_.length}
 
@@ -107,7 +106,8 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
     var sum = 0.0
     state.getState.density.foreach{prof => prof.foreach{case (link, density) => sum+=link.length*density}}
     state.getState.queue.foreach{prof => prof.foreach{case (ramp, queue) => sum+=queue}}
-    // TODO: add barrier functions
+    for (t <- 0 until T; n <- 0 until N)
+      sum+=maxBarrier(Left(control(N*t + n)), Left(.1 + math.min(freeway.rMaxList(n),state.queue(t)(orderedRamps(n))))).left.get
     sum
   }
 
@@ -164,10 +164,11 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
 
   def djdx(state: AdjointRampMeteringState, control: Adjoint.Control) = {
     val sln = new SparseDoubleMatrix1D(nState)
+    val R = 1.0
     for (t <- 0 until T+1) {
       for (n <- 0 until N) {
         sln.setQuick(t*8*N + N*0 + n,linkLengths(n) )
-        sln.setQuick(t*8*N + N*1 + n, 1 )
+        sln.setQuick(t*8*N + N*1 + n, dt )
       }
     }
     val rMax = freeway.rMaxList
@@ -178,8 +179,10 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
       r = rMax(n);
       u = control(t*N + n)
     ) {
-      if (l < r)
-        sln.setQuick(t*8*N + N*1 + n, -1.0 / (l - u))
+      if (u > .1 + math.min(l, r))
+        sln.setQuick(t*8*N+ N*1 + n, 9999999999. )
+      else if (l < r)
+        sln.setQuick(t*8*N + N*1 + n,dt +  -R / (.1 + l - u))
     }
     sln
   }
