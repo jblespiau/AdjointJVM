@@ -12,6 +12,7 @@ import io.LoadScenario
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
 import PolicyMaker._
+import org.apache.commons.math3.exception.TooManyEvaluationsException
 
 class AdjointRampMeteringSuite extends FunSuite with ShouldMatchers {
 
@@ -56,6 +57,11 @@ class AdjointRampMeteringSuite extends FunSuite with ShouldMatchers {
     val rampMetering = new AdjointRampMetering(new DumbFreeway(scenario.links), scenario.bc, scenario.ic)
 
     val policy: ProfilePolicy[MaxRampFlux, OnRamp] = rampMetering.givePolicy
+
+    rampMetering.R*=1000
+
+    // TODO: not sure why, we should check into this
+    evaluating {rampMetering.givePolicy: ProfilePolicy[MaxRampFlux, OnRamp]} should produce[TooManyEvaluationsException]
   }
 
 
