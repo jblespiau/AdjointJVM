@@ -120,9 +120,9 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
          queue = state.queue(t);
          l = orderedRamps.map{queue(_)};
          ceil = rMax.zip(l).map{case (r,l_) => .1 + math.min(r, l_)}.toArray;
-         penalty = eitherSum(maxBarrierGrad(Right(u.toArray), Right(ceil)))
+         penalty = maxBarrierGrad(Right(u.toArray), Right(ceil)).right.get.toSeq
          ) yield penalty
-    new SparseDoubleMatrix1D(temp.toArray)
+    new SparseDoubleMatrix1D(List.concat(temp:_*).toArray)
   }
 
   def doubleOrArray(fn: (Double, Double) => Double) = {
@@ -172,7 +172,7 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
     }
     val rMax = freeway.rMaxList
     for (
-      t <- 0 until T+1;
+      t <- 0 until T;
       n <- 0 until N;
       l = state.queue(t)(orderedRamps(n));
       r = rMax(n);
