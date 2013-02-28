@@ -125,8 +125,52 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
 
   def djdu(state: AdjointRampMeteringState, control: Adjoint.Control) = {
     // TODO: Add barrier functions
-    new SparseDoubleMatrix1D(nControl)
+    val sln = new SparseDoubleMatrix1D(nControl)
+    val rMax = freeway.rMaxList
+    for (t <- 0 until T;
+         u =  control.view(t*N, (t+1)*N);
+         queue = state.queue(t);
+         l = orderedRamps.map{queue(_)};
+    penalty <- (u, l, rMax).zipped.map{case () yield
+
   }
+
+  def doubleOrArray(fn: (Double, Double) => Double) = {
+    def helper(x: Either[Double, Array[Double]], ceil: Either[Double, Array[Double]]) = {
+      x match {
+        case Left(xSingle) => {
+          ceil match {
+            case Left(aSingle) => Left(fn(xSingle, aSingle))
+            case Right(aArray) => Right({
+              val xArray = Array.fill(aArray.length)(xSingle)
+              xArray.zip(aArray).map{case (x,a) => fn(x,a)}
+            })
+          }
+        }
+        case Right(xArray) => {
+          val aArray = ceil match {
+            case Left(aSingle) => Array.fill(xArray.length)(aSingle)
+            case Right(arr) => arr
+          }
+          Right(xArray.zip(aArray).map{case (x,a) => fn(x,a)})
+        }
+      }
+    }
+    helper _
+  }
+  def maxBarrierGrad = doubleOrArray((x,a) => 1.0 / math.max(a - x, 0))
+  def minBarrierGrad = doubleOrArray((x,a) => 1.0 / math.max(a - x, 0))
+  def maxBarrier = doubleOrArray((x,a) => - math.log(math.max(a - x, 0)))
+  def eitherSum(x: Either[Double, Array[Double]]) = {
+    x match {
+      case Left(a) => a
+      case Right(b) => b.sum
+    }
+  }
+  def maxBarrierSum(x: Either[Double, Array[Double]], a: Either[Double, Array[Double]]) = eitherSum(maxBarrier(x,a))
+
+
+
 
   def djdx(state: AdjointRampMeteringState, control: Adjoint.Control) = {
     DJDX
