@@ -95,18 +95,6 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
 
   lazy val linkLengths = freeway.fwLinks.map{_.length}
 
-  // optimized, this is constant for all iterations
-  lazy val DJDX = {
-    val sln = new SparseDoubleMatrix1D(nState)
-    for (t <- 0 until T+1) {
-      for (n <- 0 until N) {
-        sln.setQuick(t*8*N + N*0 + n,linkLengths(n) )
-        sln.setQuick(t*8*N + N*1 + n, 1 )
-      }
-    }
-    sln
-  }
-
   def givePolicy(network: Freeway,
                  bc: ProfilePolicy[FreewayBC, SimpleFreewayLink],
                  ic: Profile[FreewayIC, SimpleFreewayLink]) =  {
@@ -125,14 +113,16 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
 
   def djdu(state: AdjointRampMeteringState, control: Adjoint.Control) = {
     // TODO: Add barrier functions
-    val sln = new SparseDoubleMatrix1D(nControl)
+    val R = .01 // TODO: make R global in some way
     val rMax = freeway.rMaxList
-    for (t <- 0 until T;
+    val temp = for (t <- 0 until T;
          u =  control.view(t*N, (t+1)*N);
          queue = state.queue(t);
          l = orderedRamps.map{queue(_)};
-    penalty <- (u, l, rMax).zipped.map{case () yield
-
+         ceil = rMax.zip(l).map{case (r,l_) => .1 + math.min(r, l_)}.toArray;
+         penalty = eitherSum(maxBarrierGrad(Right(u.toArray), Right(ceil)))
+         ) yield penalty
+    new SparseDoubleMatrix1D(temp.toArray)
   }
 
   def doubleOrArray(fn: (Double, Double) => Double) = {
@@ -158,9 +148,9 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
     }
     helper _
   }
-  def maxBarrierGrad = doubleOrArray((x,a) => 1.0 / math.max(a - x, 0))
-  def minBarrierGrad = doubleOrArray((x,a) => 1.0 / math.max(a - x, 0))
-  def maxBarrier = doubleOrArray((x,a) => - math.log(math.max(a - x, 0)))
+  val maxBarrierGrad = doubleOrArray((x,a) => 1.0 / math.max(a - x, 0))
+  val minBarrierGrad = doubleOrArray((x,a) => 1.0 / math.max(a - x, 0))
+  val maxBarrier = doubleOrArray((x,a) => - math.log(math.max(a - x, 0)))
   def eitherSum(x: Either[Double, Array[Double]]) = {
     x match {
       case Left(a) => a
@@ -173,10 +163,29 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
 
 
   def djdx(state: AdjointRampMeteringState, control: Adjoint.Control) = {
-    DJDX
+    val sln = new SparseDoubleMatrix1D(nState)
+    for (t <- 0 until T+1) {
+      for (n <- 0 until N) {
+        sln.setQuick(t*8*N + N*0 + n,linkLengths(n) )
+        sln.setQuick(t*8*N + N*1 + n, 1 )
+      }
+    }
+    val rMax = freeway.rMaxList
+    for (
+      t <- 0 until T+1;
+      n <- 0 until N;
+      l = state.queue(t)(orderedRamps(n));
+      r = rMax(n);
+      u = control(t*N + n)
+    ) {
+      if (l < r)
+        sln.setQuick(t*8*N + N*1 + n, -1.0 / (l - u))
+    }
+    sln
   }
 
   def dhdu(state: AdjointRampMeteringState, control: Adjoint.Control) = None
+
 
   override def dhduT(state: AdjointRampMeteringState, control: Adjoint.Control) = {
     val sln = new AdjointMatrix(nControl, nState)
