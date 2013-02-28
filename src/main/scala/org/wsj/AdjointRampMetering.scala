@@ -26,6 +26,7 @@ import AdjointRampMetering._
 
 // instantiations of IC and BC for ramp metering specifically
 case class FreewayBC(demand: Double, splitRatio: Double) extends BoundaryCondition
+
 case class FreewayIC(linkCount: Double, rampCount: Double) extends InitialCondition
 
 abstract class SimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimpleFreeway(_fwLinks) {
@@ -84,6 +85,8 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
                           val _initialConditionPolicy: Profile[FreewayIC,SimpleFreewayLink])
   extends RampMeteringPolicyMaker with Adjoint[AdjointRampMeteringState] {
 
+  val R = .001 // tuning parameter
+
 
   val boundaryConditionPolicy = _boundaryConditionPolicy
   val initialConditionPolicy = _initialConditionPolicy
@@ -107,20 +110,19 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
     state.getState.density.foreach{prof => prof.foreach{case (link, density) => sum+=link.length*density}}
     state.getState.queue.foreach{prof => prof.foreach{case (ramp, queue) => sum+=queue}}
     for (t <- 0 until T; n <- 0 until N)
-      sum+=maxBarrier(Left(control(N*t + n)), Left(.1 + math.min(freeway.rMaxList(n),state.queue(t)(orderedRamps(n))))).left.get
+      sum+=R*maxBarrier(Left(control(N*t + n)), Left(.1 + math.min(freeway.rMaxList(n),state.queue(t)(orderedRamps(n))))).left.get
     sum
   }
 
   def djdu(state: AdjointRampMeteringState, control: Adjoint.Control) = {
     // TODO: Add barrier functions
-    val R = .01 // TODO: make R global in some way
     val rMax = freeway.rMaxList
     val temp = for (t <- 0 until T;
          u =  control.view(t*N, (t+1)*N);
          queue = state.queue(t);
          l = orderedRamps.map{queue(_)};
          ceil = rMax.zip(l).map{case (r,l_) => .1 + math.min(r, l_)}.toArray;
-         penalty = maxBarrierGrad(Right(u.toArray), Right(ceil)).right.get.toSeq
+         penalty = maxBarrierGrad(Right(u.toArray), Right(ceil)).right.get.map{_*R}.toSeq
          ) yield penalty
     new SparseDoubleMatrix1D(List.concat(temp:_*).toArray)
   }
@@ -164,7 +166,6 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
 
   def djdx(state: AdjointRampMeteringState, control: Adjoint.Control) = {
     val sln = new SparseDoubleMatrix1D(nState)
-    val R = 1.0
     for (t <- 0 until T+1) {
       for (n <- 0 until N) {
         sln.setQuick(t*8*N + N*0 + n,linkLengths(n) )

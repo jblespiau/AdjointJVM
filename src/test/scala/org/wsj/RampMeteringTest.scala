@@ -8,38 +8,24 @@ package org.wsj
  * To change this template use File | Settings | File Templates.
  */
 import AdjointRampMetering._
+import io.LoadScenario
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
 import PolicyMaker._
 
 class AdjointRampMeteringSuite extends FunSuite with ShouldMatchers {
 
+  val networkFilenames = List(
+    "/Users/jdr/Documents/github/AdjointRamp/networks/samitha1onramp.json"
+  )
+
   test("ramp metering actually completes full run") {
+    println("running this guy")
     val fd = FundamentalDiagram(1,1,1)
     val ramp = OnRamp(1,1,1)
-    class TestFreeway(_fwl: Seq[SimpleFreewayLink]) extends SimulatedFreeway(_fwl) {
-      def simulate(u: Adjoint.Control, bc: PolicyMaker.ProfilePolicy[FreewayBC, SimpleFreewayLink], ic: PolicyMaker.Profile[FreewayIC, SimpleFreewayLink]) = {
-        val T = bc.length
-        val N = ic.size
-        val density: DensityProfile = (for (_ <- 0 until T+1) yield {
-          (for (link <- fwLinks) yield link -> 0.0).toMap
-        }).toSeq
-        val flow: FlowProfile = (for (_ <- 0 until T+1) yield {
-          (for (link <- fwLinks) yield link -> 0.0).toMap
-        }).toSeq
-        val queue: QueueProfile = (for (_ <- 0 until T+1) yield {
-          (for (link <- fwLinks; ramp <- link.onRamp) yield ramp -> 0.0).toMap
-        }).toSeq
-        val rampFlow: RampFlowProfile = (for (_ <- 0 until T+1) yield {
-          (for (link <- fwLinks; ramp <- link.onRamp) yield ramp -> 0.0).toMap
-        }).toSeq
-
-        AdjointRampMeteringState(density, queue, Some(flow), Some(flow), Some(flow), Some(flow), Some(rampFlow), Some(rampFlow))
-      }
-    }
     val T = 3
     val N = 5
-    val freeway = new TestFreeway(for (i <- 1 to N) yield SimpleFreewayLink(1, fd, Some(ramp)))
+    val freeway = new DumbFreeway(for (i <- 1 to N) yield SimpleFreewayLink(1, fd, Some(ramp)))
     val links = freeway.links
 
     // simple ic's and bc's
@@ -62,4 +48,15 @@ class AdjointRampMeteringSuite extends FunSuite with ShouldMatchers {
     val policy: ProfilePolicy[MaxRampFlux, OnRamp] =  rampPC.givePolicy
     println("sure")
   }
+
+
+  test("run loadScenario through adjoint on dumb freeway") {
+    println("then this guy")
+    val scenario = LoadScenario.loadScenario(Constants.samithaFN)
+    val rampMetering = new AdjointRampMetering(new DumbFreeway(scenario.links), scenario.bc, scenario.ic)
+
+    val policy: ProfilePolicy[MaxRampFlux, OnRamp] = rampMetering.givePolicy
+  }
+
+
 }
