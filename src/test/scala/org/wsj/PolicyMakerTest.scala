@@ -32,20 +32,8 @@ class PolicyMakerTest extends FunSuite with ShouldMatchers {
     // create network
     val fd = FundamentalDiagram(1,1,1)
     val ramp = OnRamp(1,1,1)
-    class TestFreeway(_fwl: Seq[SimpleFreewayLink]) extends SimulatedFreeway(_fwl) {
-      def simulate(u: Adjoint.Control, ic: PolicyMaker.ProfilePolicy[FreewayBC, SimpleFreewayLink], bc: PolicyMaker.Profile[FreewayIC, SimpleFreewayLink]) = {
-        val T = bc.size
-        val N = ic.length
-        val density: DensityProfile = (for (_ <- 0 until T+1) yield {
-          (for (link <- fwLinks) yield link -> 0.0).toMap
-        }).toSeq
-        val queue: QueueProfile = (for (_ <- 0 until T+1) yield {
-          (for (link <- fwLinks; ramp <- link.onRamp) yield ramp -> 0.0).toMap
-        }).toSeq
-        AdjointRampMeteringState(density, queue)
-      }
-    }
-    val freeway = new TestFreeway(for (i <- 1 to 5) yield SimpleFreewayLink(1, fd, Some(ramp)))
+
+    val freeway = new DumbFreeway(for (i <- 1 to 5) yield SimpleFreewayLink(1, fd, Some(ramp)))
     val links = freeway.links
 
     // simple ic's and bc's

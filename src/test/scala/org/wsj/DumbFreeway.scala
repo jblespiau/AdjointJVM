@@ -27,6 +27,6 @@ class DumbFreeway (_fwl: Seq[SimpleFreewayLink]) extends SimulatedFreeway(_fwl) 
       (for (link <- fwLinks; ramp <- link.onRamp) yield ramp -> 0.0).toMap
     }).toSeq
 
-    AdjointRampMeteringState(density, queue, Some(flow), Some(flow), Some(flow), Some(flow), Some(rampFlow), Some(rampFlow))
+    AdjointRampMeteringState(density, queue, flow, flow, flow, flow, rampFlow, rampFlow)
   }
 }
