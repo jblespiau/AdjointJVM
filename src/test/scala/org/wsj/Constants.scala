@@ -9,6 +9,6 @@ package org.wsj
  */
 object Constants {
 
-  val samithaFN = "/Users/jdr/Documents/github/AdjointRamp/networks/samitha1onramp.json"
+  val samithaFN = "data/samitha1onramp.json"
 
 }

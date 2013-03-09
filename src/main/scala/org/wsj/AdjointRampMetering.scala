@@ -78,16 +78,16 @@ class WSJSimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimulatedFre
 
       val prevDensity = density(loopTime)
       val prevQueue  = queueStore(loopTime)
-      val inFluxes = Array[Double](N)
-      val outFluxes = Array[Double](N)
-      val rampFluxes = Array[Double](N)
-      val mlDemand = Array[Double](N)
-      val mlSupply = Array[Double](N)
-      val rampDemand = Array[Double](N)
-      val offRampFluxes = Array[Double](N)
+      val inFluxes = new Array[Double](N)
+      val outFluxes = new Array[Double](N)
+      val rampFluxes = new Array[Double](N)
+      val mlDemand = new Array[Double](N)
+      val mlSupply = new Array[Double](N)
+      val rampDemand = new Array[Double](N)
+      val offRampFluxes = new Array[Double](N)
 
 
-      for (loopLink <- 0 to N) {
+      for (loopLink <- 0 to N-1) {
         var linkUp = null.asInstanceOf[SimpleFreewayLink]
         var densityUp = 0.0
         var linkDown = null.asInstanceOf[SimpleFreewayLink]
@@ -99,11 +99,11 @@ class WSJSimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimulatedFre
         var p = 1.0
         var rmax = 0.0
 
-        if (loopLink == 0) {// start b.c.
+        if (loopLink > 0) {// start b.c.
           linkUp = fwLinksList(loopLink-1)
           densityUp = prevDensity(loopLink-1)
         }
-        if (loopLink == N) {// end b.c.
+        if (loopLink == N-1) {// end b.c.
           linkDown = fwLinksList(loopLink)
           densityDown = prevDensity(loopLink)
           queue = prevQueue(loopLink)
@@ -129,8 +129,8 @@ class WSJSimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimulatedFre
       }
 
 
-      val newDensity = Array[Double](N)
-      val newQueue = Array[Double](N)
+      val newDensity = new Array[Double](N)
+      val newQueue = new Array[Double](N)
       for (loopLink <- 0 to N-1) {
         val fIn = inFluxes(loopLink)
         val fOut = outFluxes(loopLink)
@@ -153,28 +153,28 @@ class WSJSimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimulatedFre
     }
     //convert arrays into profiles
     val densityProfile: DensityProfile = (for (t <- 0 until T+1) yield {
-      (for (linkNum <- 0 to N) yield fwLinksList(linkNum) -> density(t)(linkNum)).toMap
+      (for (linkNum <- 0 to N-1) yield fwLinksList(linkNum) -> density(t)(linkNum)).toMap
     }).toSeq
     val queueProfile: QueueProfile = (for (t <- 0 until T+1) yield {
-      (for (linkNum <- 0 to N) yield fwLinksList(linkNum).onRamp.get -> queueStore(t)(linkNum)).toMap
+      (for (linkNum <- 0 to N-1) yield fwLinksList(linkNum).onRamp.get -> queueStore(t)(linkNum)).toMap
     }).toSeq
-    val demandProfile: FlowProfile = (for (t <- 0 until T+1) yield {
-      (for (linkNum <- 0 to N) yield fwLinksList(linkNum) -> demandML(t)(linkNum)).toMap
+    val demandProfile: FlowProfile = (for (t <- 0 until T) yield {
+      (for (linkNum <- 0 to N-1) yield fwLinksList(linkNum) -> demandML(t)(linkNum)).toMap
     }).toSeq
-    val supplyProfile: FlowProfile = (for (t <- 0 until T+1) yield {
-      (for (linkNum <- 0 to N) yield fwLinksList(linkNum) -> supplyML(t)(linkNum)).toMap
+    val supplyProfile: FlowProfile = (for (t <- 0 until T) yield {
+      (for (linkNum <- 0 to N-1) yield fwLinksList(linkNum) -> supplyML(t)(linkNum)).toMap
     }).toSeq
-    val fluxInProfile: FlowProfile = (for (t <- 0 until T+1) yield {
-      (for (linkNum <- 0 to N) yield fwLinksList(linkNum) -> fluxIn(t)(linkNum)).toMap
+    val fluxInProfile: FlowProfile = (for (t <- 0 until T) yield {
+      (for (linkNum <- 0 to N-1) yield fwLinksList(linkNum) -> fluxIn(t)(linkNum)).toMap
     }).toSeq
-    val fluxOutProfile: FlowProfile = (for (t <- 0 until T+1) yield {
-      (for (linkNum <- 0 to N) yield fwLinksList(linkNum) -> fluxOut(t)(linkNum)).toMap
+    val fluxOutProfile: FlowProfile = (for (t <- 0 until T) yield {
+      (for (linkNum <- 0 to N-1) yield fwLinksList(linkNum) -> fluxOut(t)(linkNum)).toMap
     }).toSeq
-    val rampDemandProfile: RampFlowProfile = (for (t <- 0 until T+1) yield {
-      (for (linkNum <- 0 to N) yield fwLinksList(linkNum).onRamp.get -> demandRamp(t)(linkNum)).toMap
+    val rampDemandProfile: RampFlowProfile = (for (t <- 0 until T) yield {
+      (for (linkNum <- 0 to N-1) yield fwLinksList(linkNum).onRamp.get -> demandRamp(t)(linkNum)).toMap
     }).toSeq
-    val fluxRampProfile: RampFlowProfile = (for (t <- 0 until T+1) yield {
-      (for (linkNum <- 0 to N) yield fwLinksList(linkNum).onRamp.get -> fluxRamp(t)(linkNum)).toMap
+    val fluxRampProfile: RampFlowProfile = (for (t <- 0 until T) yield {
+      (for (linkNum <- 0 to N-1) yield fwLinksList(linkNum).onRamp.get -> fluxRamp(t)(linkNum)).toMap
     }).toSeq
 
     AdjointRampMeteringState(densityProfile, queueProfile, demandProfile, supplyProfile, fluxInProfile, fluxOutProfile,
@@ -190,7 +190,7 @@ class WSJSimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimulatedFre
                     else List(linkUp.fd.v * densityUp, linkUp.fd.fMax).min}
     val demandRamp = List(queue/dt, rmax, u).min
 
-    val supplyDS = {if (linkDown == None) Double.MaxValue
+    val supplyDS = {if (linkDown == null) Double.MaxValue
                     else List(linkDown.fd.fMax, linkDown.fd.w * (linkDown.fd.rhoMax - densityDown)).min}
 
     val demand = demandUS * beta + demandRamp
