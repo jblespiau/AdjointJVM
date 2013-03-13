@@ -109,7 +109,6 @@ trait Adjoint[T<:SystemState] {
       def value(point: Array[Double]) = {
         updateState(point)
         val obj = objective(currentState, point)
-        println(obj)
         obj
       }
 

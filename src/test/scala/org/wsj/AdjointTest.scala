@@ -52,17 +52,21 @@ class AdjointSuite extends FunSuite with ShouldMatchers {
 
   test("see if SimpleAdjoint works as it should") {
     val optimizers = List(
-      // new IpOptAdjointOptimizer,
+      new IpOptAdjointOptimizer,
       new NonLinearConjugateGradientOptimizer(ConjugateGradientFormula.POLAK_RIBIERE)
     )
     for (optimizer <- optimizers) {
+
       val simpleAdjoint = new SimpleAdjoint(optimizer)
       val tolerance = .0001
       val ustar =  6.0 / 13
       val xstar = 9.0 / 13
       for (i <- 1 to 10) {
+        println("beginning")
         val u0: Control = Array(5*math.random)
         val uCheck= simpleAdjoint.solve(u0)
+        println("uCheck")
+        println(uCheck(0))
         uCheck(0) should be (ustar plusOrMinus tolerance)
         simpleAdjoint.forwardSimulate(uCheck).getState should be (xstar plusOrMinus tolerance)
         println("next.....")
