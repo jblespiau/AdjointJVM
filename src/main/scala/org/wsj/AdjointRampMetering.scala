@@ -135,7 +135,7 @@ class WSJSimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimulatedFre
         val fIn = inFluxes(loopLink)
         val fOut = outFluxes(loopLink)
         val fRampIn = bcDemandArray(loopTime)(loopLink)
-        val fRampOut = bcSplitRatioArray(loopTime)(loopLink)
+        val fRampOut = rampFluxes(loopLink)
         newDensity(loopLink) = prevDensity(loopLink) + dt / fwLinksList(loopLink).length * (fIn - fOut)
         newQueue(loopLink) = prevQueue(loopLink) + dt * (fRampIn - fRampOut)
       }
@@ -185,6 +185,7 @@ class WSJSimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimulatedFre
                     densityDown: Double, queue: Double, queueDemand: Double, u: Double,
                     beta: Double, p: Double, dt: Double, rmax: Double) =
   {
+    val pPrime = 1. / (1. + p)
 
     val demandUS = {if (linkUp == null) 0
                     else List(linkUp.fd.v * densityUp, linkUp.fd.fMax).min}
@@ -202,8 +203,8 @@ class WSJSimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimulatedFre
       fluxDSRamp = demandRamp
     } else { // supply constrained
       // blindly assume P intersects in feasible region
-      fluxDSRamp = (1 - p) * supplyDS
-      fluxUSout = p * supplyDS / beta
+      fluxDSRamp = (1 - pPrime) * supplyDS
+      fluxUSout = pPrime * supplyDS / beta
       if (fluxUSout > demandUS) { // maxed out inlink
         fluxUSout = demandUS
         fluxDSRamp = supplyDS - beta * fluxUSout
@@ -215,6 +216,7 @@ class WSJSimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimulatedFre
     }
     val fluxDSin = fluxUSout * beta + fluxDSRamp
     val offRampFlux = fluxUSout * (1 - beta)
+    assert(List(fluxUSout, fluxDSin, fluxDSRamp, demandUS, demandRamp, supplyDS, offRampFlux).filter {_ < 0}.length == 0)
     AdjointRampMeteringJunctionOutput(fluxUSout, fluxDSin, fluxDSRamp, demandUS, demandRamp, supplyDS, offRampFlux)
   }
 }
