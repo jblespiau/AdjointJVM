@@ -20,9 +20,11 @@ class WSJFreewayTest extends FunSuite with ShouldMatchers {
     val fw = new WSJSimulatedFreeway(scen.links)
 
     val rampMetering = new AdjointRampMetering(fw, scen.bc, scen.ic)
-    rampMetering.optimizer = new IpOptAdjointOptimizer
-
+    //rampMetering.optimizer = new SimpleGradientDescentOptimizer
+    rampMetering.optimizer = new SimpleUpdateROptimizer(rampMetering, .1, 5)
+    //rampMetering.optimizer = new IpOptUpdateROptimizer(rampMetering, .4, 40)
     val output: ProfilePolicy[MaxRampFlux, OnRamp] = rampMetering.givePolicy
+    println(output)
   }
 
 }

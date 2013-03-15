@@ -16,7 +16,6 @@ class IpOptAdjointOptimizer extends DifferentiableMultivariateOptimizer {
 
 
   class IpOptAdjoint extends Ipopt {
-
     var u0: Array[Double] = null
     var fn: DifferentiableMultivariateFunction = null
 
@@ -65,22 +64,22 @@ class IpOptAdjointOptimizer extends DifferentiableMultivariateOptimizer {
 
 
   }
-
   def optimize(maxEval: Int, f: DifferentiableMultivariateFunction, goalType: GoalType, startPoint: Array[Double]) = {
-    val ipopt = new IpOptAdjoint
+    val solver = new IpOptAdjoint
     val n = startPoint.length
-    ipopt.fn = f
-    ipopt.u0 = startPoint
-    ipopt.create(n, 0, 0, 0, Ipopt.C_STYLE)
-    ipopt.setStringOption(Ipopt.KEY_MAX_ITER, getMaxEvaluations.toString)
-    ipopt.setStringOption(Ipopt.KEY_MU_STRATEGY,"adaptive")
-    ipopt.setStringOption(Ipopt.KEY_HESSIAN_APPROXIMATION,"limited-memory")//LBFGS
-    val status = ipopt.OptimizeNLP()
+    solver.fn = f
+    solver.u0 = startPoint
+    solver.create(n, 0, 0, 0, Ipopt.C_STYLE)
+    solver.setStringOption(Ipopt.KEY_MU_STRATEGY,"adaptive")
+    solver.setStringOption(Ipopt.KEY_HESSIAN_APPROXIMATION,"limited-memory")
+    solver.setIntegerOption(Ipopt.KEY_MAX_ITER, getMaxEvaluations)
+
+    val status = solver.OptimizeNLP()
     println("status")
     println(status)
     val somePoint = {
       if (status <= 0 || status >= 0)
-        Some(new PointValuePair(ipopt.getState(), 0.0))
+        Some(new PointValuePair(solver.getState(), 0.0))
       else
         None
     }
@@ -89,16 +88,112 @@ class IpOptAdjointOptimizer extends DifferentiableMultivariateOptimizer {
     }
   }
 
-  def getMaxEvaluations = 100
+  def getMaxEvaluations = 20
 
   def getEvaluations = 10
 
-  def getConvergenceChecker = new ConvergenceChecker[PointValuePair] {
-    println("converged outer")
-    def converged(iteration: Int, previous: PointValuePair, current: PointValuePair) = {
-      println("converged")
-      false
+  val convergenceChecker = new MaxIterationConvergenceChecker(getMaxEvaluations)
+
+  def getConvergenceChecker = convergenceChecker
+}
+
+class MaxIterationConvergenceChecker(maxIter: Int) extends ConvergenceChecker[PointValuePair] {
+  def converged(iteration: Int, previous: PointValuePair, current: PointValuePair) = {
+    iteration >= maxIter
+  }
+}
+
+trait LineSearch {
+  def searchAlongLine(f: DifferentiableMultivariateFunction,
+                      gradient: Array[Double],
+                      currentPoint: Array[Double],
+                       iteration: Int = -1): Array[Double]
+}
+
+
+
+trait GradientDescentOptimizer extends DifferentiableMultivariateOptimizer with LineSearch {
+  def getMaxEvaluations = 100
+
+  def getEvaluations = 100
+
+  def optimize(maxEval: Int, f: DifferentiableMultivariateFunction, goalType: GoalType, startPoint: Array[Double]) = {
+    var iter = 1
+    val maxIter = getMaxEvaluations
+    var u = startPoint
+    var prevCost = f.value(u)
+    var break = false
+    while (iter <= maxIter && !break) {
+      iter+=1
+      val grad = f.gradient().value(u)
+      val nextU = searchAlongLine(f, grad, u, iter )
+      val nextCost = f.value(nextU)
+      val nextPoint = new PointValuePair(nextU, nextCost)
+      val prevPoint = new PointValuePair(u, prevCost)
+      if (getConvergenceChecker.converged(iter, prevPoint, nextPoint))
+        break = true
+      u = nextU
+      prevCost = nextCost
+      println("cost: " + nextCost)
     }
+    new PointValuePair(u, prevCost)
   }
 
+  val convergenceChecker = new MaxIterationConvergenceChecker(getMaxEvaluations)
+
+  def getConvergenceChecker = convergenceChecker
 }
+
+class SimpleGradientDescentOptimizer extends GradientDescentOptimizer {
+
+  val alpha = .1
+
+  def searchAlongLine(f: DifferentiableMultivariateFunction,
+                      gradient: Array[Double],
+                      currentPoint: Array[Double],
+                      iteration: Int): Array[Double] =  {
+    val stepSize = alpha / iteration
+    currentPoint.zip{gradient}.map{case (uVal, gVal) => math.max(uVal - stepSize*gVal, 0.0)}
+  }
+}
+
+trait FeedItBackOptimizer extends DifferentiableMultivariateOptimizer {
+  def update(): Unit
+  val feedItIterations:Int
+  val baseOptimizer: DifferentiableMultivariateOptimizer
+  def getMaxEvaluations = baseOptimizer.getMaxEvaluations
+  def getEvaluations = baseOptimizer.getEvaluations
+  def getConvergenceChecker = baseOptimizer.getConvergenceChecker
+
+  def optimize(maxEval: Int, f: DifferentiableMultivariateFunction, goalType: GoalType, startPoint: Array[Double]) = {
+    var iter = 0
+    var sln = startPoint
+    while (iter < feedItIterations) {
+      iter+=1
+      sln = baseOptimizer.optimize(maxEval, f, goalType, sln).getPoint
+      update()
+    }
+    new PointValuePair(sln, f.value(sln))
+  }
+}
+
+trait UpdateROpFeedItBackOptimizer extends FeedItBackOptimizer {
+  val rampMetering: AdjointRampMetering
+  val scaleFactor: Double
+  def update() {
+    rampMetering.R*=scaleFactor
+  }
+}
+
+
+class SimpleUpdateROptimizer(val rampMetering: AdjointRampMetering,
+                             val scaleFactor: Double,
+                             val feedItIterations: Int = 10) extends UpdateROpFeedItBackOptimizer {
+  val baseOptimizer = new SimpleGradientDescentOptimizer
+}
+class IpOptUpdateROptimizer(val rampMetering: AdjointRampMetering,
+                             val scaleFactor: Double,
+                             val feedItIterations: Int = 10) extends UpdateROpFeedItBackOptimizer {
+  val baseOptimizer = new IpOptAdjointOptimizer
+}
+

@@ -87,7 +87,7 @@ class WSJSimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimulatedFre
       val offRampFluxes = new Array[Double](N)
 
 
-      for (loopLink <- 0 to N-1) {
+      for (loopLink <- 0 to N) {
         var linkUp = null.asInstanceOf[SimpleFreewayLink]
         var densityUp = 0.0
         var linkDown = null.asInstanceOf[SimpleFreewayLink]
@@ -103,7 +103,7 @@ class WSJSimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimulatedFre
           linkUp = fwLinksList(loopLink-1)
           densityUp = prevDensity(loopLink-1)
         }
-        if (loopLink == N-1) {// end b.c.
+        if (loopLink < N) {// end b.c.
           linkDown = fwLinksList(loopLink)
           densityDown = prevDensity(loopLink)
           queue = prevQueue(loopLink)
@@ -113,7 +113,7 @@ class WSJSimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimulatedFre
           p = linkDown.onRamp.get.priority
           rmax = linkDown.fd.rhoMax
         }
-        val state = solveJunction(linkUp, densityUp, linkDown, densityDown, queue, queueDemand, u.apply(loopLink), beta, p, dt, rmax)
+        val state = solveJunction(linkUp, densityUp, linkDown, densityDown, queue, queueDemand, uCurrent, beta, p, dt, rmax)
 
           if (loopLink > 0) {
             outFluxes(loopLink - 1) = state.fluxUSout
@@ -216,7 +216,9 @@ class WSJSimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimulatedFre
     }
     val fluxDSin = fluxUSout * beta + fluxDSRamp
     val offRampFlux = fluxUSout * (1 - beta)
-    assert(List(fluxUSout, fluxDSin, fluxDSRamp, demandUS, demandRamp, supplyDS, offRampFlux).filter {_ < 0}.length == 0)
+    assert(fluxDSRamp <= demandRamp)
+    assert(fluxUSout <= demandUS)
+    //assert(List(fluxUSout, fluxDSin, fluxDSRamp, demandUS, demandRamp, supplyDS, offRampFlux).filter {_ < -0.0001}.length == 0)
     AdjointRampMeteringJunctionOutput(fluxUSout, fluxDSin, fluxDSRamp, demandUS, demandRamp, supplyDS, offRampFlux)
   }
 }
@@ -237,13 +239,24 @@ trait RampMeteringPolicyMaker extends BCICPolicyMaker[FreewayLink, FreewayJuncti
   val nOnramps = orderedRamps.length
   lazy val T = boundaryConditionPolicy.length
 
-  var optimizer: DifferentiableMultivariateOptimizer =
-    new NonLinearConjugateGradientOptimizer(ConjugateGradientFormula.POLAK_RIBIERE)
+  class Optimizer(formType: ConjugateGradientFormula) extends NonLinearConjugateGradientOptimizer(formType) {
+    override def getMaxEvaluations() = 10000
+  }
+
+  //var optimizer:DifferentiableMultivariateOptimizer = new Optimizer(ConjugateGradientFormula.POLAK_RIBIERE)
+  var optimizer: DifferentiableMultivariateOptimizer = new IpOptAdjointOptimizer
 
   def initialControl: ProfilePolicy[MaxRampFlux, OnRamp] = {
-    (for (_ <- 1 to T) yield {
-      orderedRamps.zip(Array.fill(nOnramps)(MaxRampFlux(0.0))).toMap
+    val largeU = (for (_ <- 1 to T) yield {
+      orderedRamps.zip(Array.fill(nOnramps)(MaxRampFlux(10000.0))).toMap
     }).toSeq
+    val sim = freeway.simulate(uToVector(largeU), boundaryConditionPolicy, initialConditionPolicy)
+    val queue = sim.queue
+    queue.map{prof => orderedRamps.map{ramp =>
+      math.min(prof(ramp), ramp.maxFlux)
+    }}.map{
+      prof => orderedRamps.zip {prof.map{flux => MaxRampFlux(.001 * flux)}}.toMap
+    }.toSeq
   }
 
   def uToVector(u: ProfilePolicy[MaxRampFlux, OnRamp]): Adjoint.Control = {
@@ -267,7 +280,7 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
                           val _initialConditionPolicy: Profile[FreewayIC,SimpleFreewayLink])
   extends RampMeteringPolicyMaker with Adjoint[AdjointRampMeteringState] {
 
-  var R = .001 // tuning parameter
+  var R = 0.1 // tuning parameter
 
 
   val boundaryConditionPolicy = _boundaryConditionPolicy
@@ -386,7 +399,7 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
         val uInd = t*N + n
         val u = control(uInd)
         if (u < math.min( l / dt, rMax))
-          sln.setQuick(uInd, t*N*8 + N*5 + n, -1.0)
+          sln.setQuick(uInd, t*N*8 + N*4 + n, -1.0)
       }
     }
     Some(sln)
@@ -408,16 +421,16 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
           c match {
             case 0 => {
               if (k > 0) {
-                sln.setQuick(N*8*(k - 1) + N*(1) + i, hi, -1)
+                sln.setQuick(N*8*(k - 1) + N*(0) + i, hi, -1)
                 val l = linkLengths(i)
-                sln.setQuick(N*8*(k - 1) + N*(6) + i, hi, -dt / l)
-                sln.setQuick(N*8*(k - 1) + N*(7) + i, hi, dt / l)
+                sln.setQuick(N*8*(k - 1) + N*(5) + i, hi, -dt / l)
+                sln.setQuick(N*8*(k - 1) + N*(6) + i, hi, dt / l)
               }
             }
-             case 1 => {
+            case 1 => {
                if (k > 0) {
-                 sln.setQuick(N*8*(k - 1) + N*(2) + i, hi, -1)
-                 sln.setQuick(N*8*(k - 1) + N*(8) + i, hi, dt)
+                 sln.setQuick(N*8*(k - 1) + N*(1) + i, hi, -1)
+                 sln.setQuick(N*8*(k - 1) + N*(7) + i, hi, dt)
               }
             }
             case 2 => {
@@ -515,7 +528,7 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
             }
             case 7 => {
               sln.setQuick(N*8*(k) + N*(5) + i, hi, -1)
-              if (i > 1)
+              if (i > 0)
                 sln.setQuick(N*8*(k) + N*(6) + i-1, hi, bc(kk)(links(i)).splitRatio)
             }
           }

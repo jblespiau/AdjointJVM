@@ -11,8 +11,6 @@ package org.wsj.io
 import scala.util.parsing.json
 import org.wsj.PolicyMaker._
 import org.wsj._
-import io.FreewayScenario
-import scala.Some
 import org.wsj.SimpleFreewayLink
 import scala.Some
 import org.wsj.FreewayBC
@@ -48,7 +46,7 @@ object LoadScenario {
     val fmArray = toDoubleArray(map.get("fm").get.asInstanceOf[List[Any]])
     val pArray = toDoubleArray(map.get("p").get.asInstanceOf[List[Any]])
     val lengthArray = toDoubleArray(map.get("L").get.asInstanceOf[List[Any]])
-    val rMaxArray = toDoubleArray(map.get("p").get.asInstanceOf[List[Any]])
+    val rMaxArray = toDoubleArray(map.get("rmax").get.asInstanceOf[List[Any]])
     val demands = map.get("D").get.asInstanceOf[List[Any]]
     val betas = map.get("beta").get.asInstanceOf[List[Any]]
     val betasArray = for (L(b) <- betas) yield toDoubleArray(b)
