@@ -3,3 +3,4 @@ project/target/
 .idea/
 .idea_modules/
 src/main/scala/org/wsj/Junk.scala
+plot.pdf

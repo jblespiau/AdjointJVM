@@ -27,6 +27,14 @@ object PolicyMaker {
 
   // types of policies that can be acted upon should all belong here, add more classes as more cases come up
   case class MaxRampFlux(flux: Double) extends PolicyControl
+
+  def profileToArray[T,C](profile: Profile[T,C], ordering: Seq[C], unwrap: (T) => Double) = {
+    ordering.map {(c: C) => unwrap(profile(c))}.toArray
+  }
+
+  def profilePolicyToArray[T,C](pp: ProfilePolicy[T,C], ordering: Seq[C], unwrap: (T) => Double) = {
+    pp.map{profileToArray(_, ordering, unwrap)}.toArray
+  }
 }
 
 

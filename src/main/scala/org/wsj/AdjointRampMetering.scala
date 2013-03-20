@@ -45,6 +45,10 @@ abstract class SimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends Simple
 }
 
 class WSJSimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimulatedFreeway(_fwLinks)    {
+
+
+
+
   def simulate(u: Adjoint.Control,
                bc: PolicyMaker.ProfilePolicy[FreewayBC, SimpleFreewayLink],
                ic: PolicyMaker.Profile[FreewayIC, SimpleFreewayLink]) =
@@ -239,6 +243,42 @@ trait RampMeteringPolicyMaker extends BCICPolicyMaker[FreewayLink, FreewayJuncti
   val nOnramps = orderedRamps.length
   lazy val T = boundaryConditionPolicy.length
 
+
+
+
+  def totalTravelTime(state: AdjointRampMeteringState, control: Adjoint.Control) = {
+    totalQueues(state, control) + totalDensities(state, control)
+  }
+
+  def totalQueues(state: AdjointRampMeteringState, control: Adjoint.Control) = {
+    var sum = 0.0
+    state.getState.queue.foreach{
+      prof =>
+        prof.foreach{
+          case (ramp, queue) => sum+=queue
+        }
+    }
+    sum
+  }
+  def totalDensities(state: AdjointRampMeteringState, control: Adjoint.Control) = {
+    var sum = 0.0
+    state.getState.density.foreach{
+      prof => {
+        prof.foreach{case (link, density) =>
+          sum+=link.length*density
+        }
+      }
+    }
+    sum
+  }
+
+  def linkProfileToArray[T]: (ProfilePolicy[T, SimpleFreewayLink], (T) => Double) => Array[Array[Double]] =
+    PolicyMaker.profilePolicyToArray[T, SimpleFreewayLink](_, links, _)
+  def queueProfileToArray[T]: (ProfilePolicy[T, OnRamp], (T) => Double) => Array[Array[Double]] =
+    PolicyMaker.profilePolicyToArray(_, orderedRamps, _)
+  def controlProfileToArray = queueProfileToArray(_: ProfilePolicy[AppliedControl, AppliedControlEntity], (rf: MaxRampFlux) => rf.flux)
+
+
   class Optimizer(formType: ConjugateGradientFormula) extends NonLinearConjugateGradientOptimizer(formType) {
     override def getMaxEvaluations() = 10000
   }
@@ -306,20 +346,11 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
     freeway.simulate(control, boundaryConditionPolicy, initialConditionPolicy)
 
   def objective(state: AdjointRampMeteringState, control: Adjoint.Control) = {
+    totalTravelTime(state, control) + barrierCost(state, control)
+  }
+
+  def barrierCost(state: AdjointRampMeteringState, control: Adjoint.Control) = {
     var sum = 0.0
-    state.getState.density.foreach{
-      prof => {
-        prof.foreach{case (link, density) =>
-          sum+=link.length*density
-        }
-      }
-    }
-    state.getState.queue.foreach{
-      prof =>
-        prof.foreach{
-          case (ramp, queue) => sum+=queue
-        }
-    }
     for (t <- 0 until T; n <- 0 until N) {
       val queueLength = state.queue(t)(orderedRamps(n))
       val rMax = freeway.rMaxList(n)
@@ -330,6 +361,8 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
     }
     sum
   }
+
+
 
   def djdu(state: AdjointRampMeteringState, control: Adjoint.Control) = {
     // TODO: Add barrier functions
@@ -377,9 +410,6 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
     }
   }
   def maxBarrierSum(x: Either[Double, Array[Double]], a: Either[Double, Array[Double]]) = eitherSum(maxBarrier(x,a))
-
-
-
 
   def djdx(state: AdjointRampMeteringState, control: Adjoint.Control) = {
     val sln = new SparseDoubleMatrix1D(nState)
@@ -559,7 +589,6 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
     Some(sln)
   }
 
-  // where the physics comes in, must be implemented
   def dhdx(state: AdjointRampMeteringState, control: Adjoint.Control) = None
 
 

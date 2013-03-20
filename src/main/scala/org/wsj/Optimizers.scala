@@ -3,6 +3,7 @@ package org.wsj
 import org.apache.commons.math3.optimization.{ConvergenceChecker, PointValuePair, GoalType, DifferentiableMultivariateOptimizer}
 import org.apache.commons.math3.analysis.DifferentiableMultivariateFunction
 import org.coinor.Ipopt
+import collection.mutable.ListBuffer
 
 /**
  * Created with IntelliJ IDEA.
@@ -120,13 +121,17 @@ trait GradientDescentOptimizer extends DifferentiableMultivariateOptimizer with 
 
   def getEvaluations = maxEvaluations
 
+  var intermediates: List[Double] = List()
+
   def optimize(maxEval: Int, f: DifferentiableMultivariateFunction, goalType: GoalType, startPoint: Array[Double]) = {
+    intermediates = List()
     var iter = 0
     val maxIter = getMaxEvaluations
     var u = startPoint
     var prevCost = f.value(u)
     var break = false
     while (iter <= maxIter && !break) {
+      intermediates::=prevCost
       iter+=1
       if (iter % 50 == 0) println(iter)
       val grad = f.gradient().value(u)
