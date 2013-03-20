@@ -81,7 +81,8 @@ trait Adjoint[T<:SystemState] {
     val lambda = adjointVector(state, control)
     val dhduT = getDhduT(state, control)
     val right = dAlg.mult(dhduT, lambda)
-    return djduSln.assign(right, DoubleFunctions.minus)
+    val grad = djduSln.assign(right, DoubleFunctions.minus)
+    grad
   }
 
   def adjointVector(state: T, control: Control): AdjointVector = {

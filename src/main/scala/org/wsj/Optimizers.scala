@@ -88,9 +88,11 @@ class IpOptAdjointOptimizer extends DifferentiableMultivariateOptimizer {
     }
   }
 
-  def getMaxEvaluations = 20
+  def getMaxEvaluations = maxEvaluations
 
-  def getEvaluations = 10
+  var maxEvaluations = 100
+
+  def getEvaluations = maxEvaluations
 
   val convergenceChecker = new MaxIterationConvergenceChecker(getMaxEvaluations)
 
@@ -113,18 +115,20 @@ trait LineSearch {
 
 
 trait GradientDescentOptimizer extends DifferentiableMultivariateOptimizer with LineSearch {
-  def getMaxEvaluations = 100
+  var maxEvaluations = 400
+  def getMaxEvaluations = maxEvaluations
 
-  def getEvaluations = 100
+  def getEvaluations = maxEvaluations
 
   def optimize(maxEval: Int, f: DifferentiableMultivariateFunction, goalType: GoalType, startPoint: Array[Double]) = {
-    var iter = 1
+    var iter = 0
     val maxIter = getMaxEvaluations
     var u = startPoint
     var prevCost = f.value(u)
     var break = false
     while (iter <= maxIter && !break) {
       iter+=1
+      if (iter % 50 == 0) println(iter)
       val grad = f.gradient().value(u)
       val nextU = searchAlongLine(f, grad, u, iter )
       val nextCost = f.value(nextU)
@@ -135,6 +139,8 @@ trait GradientDescentOptimizer extends DifferentiableMultivariateOptimizer with 
       u = nextU
       prevCost = nextCost
       println("cost: " + nextCost)
+      //println(u.mkString("\n"))
+      //print()
     }
     new PointValuePair(u, prevCost)
   }
@@ -146,7 +152,7 @@ trait GradientDescentOptimizer extends DifferentiableMultivariateOptimizer with 
 
 class SimpleGradientDescentOptimizer extends GradientDescentOptimizer {
 
-  val alpha = .1
+  var alpha = .1
 
   def searchAlongLine(f: DifferentiableMultivariateFunction,
                       gradient: Array[Double],

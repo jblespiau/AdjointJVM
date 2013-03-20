@@ -10,5 +10,7 @@ package org.wsj
 object Constants {
 
   val samithaFN = "data/samitha1onramp.json"
+  val bigFN = "data/big.json"
+
 
 }

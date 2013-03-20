@@ -17,7 +17,7 @@ case class FundamentalDiagram(v: Double, fMax: Double, rhoMax: Double)  {
 }
 
 // can be viewed as a simple link
-case class OnRamp(maxLength: Double, maxFlux: Double, priority: Double) extends Link with ControlEntity
+case class OnRamp(maxLength: Double, maxFlux: Double, priority: Double, id: Int = FreewayLink.nextId) extends Link with ControlEntity
 case class OffRamp(maxFlux: Option[Double] = None) extends Link
 
 // since fw junctions only allow one in and one out, and model on/offramps as buffers
@@ -66,8 +66,9 @@ object FreewayLink {
 // simpler expression of Freeway, which is more in tune with our def'n of offramp and onramp.
 case class SimpleFreewayLink(_length: Double,
                              _fd: FundamentalDiagram,
-                             onRamp: Option[OnRamp])
-  extends FreewayLink(_length, _fd)
+                             onRamp: Option[OnRamp],
+                             _id: Int = FreewayLink.nextId)
+  extends FreewayLink(_length, _fd, _id)
 
 // main benefit is it automatically constructs junctions
 case class SimpleFreeway(fwLinks: Seq[SimpleFreewayLink]) extends Freeway {

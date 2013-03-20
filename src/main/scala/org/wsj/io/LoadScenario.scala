@@ -54,11 +54,21 @@ object LoadScenario {
     val onramps = rMaxArray.zip(pArray).map {case (r,pv) => Some(OnRamp(-1, r, pv))}
     val fds = (vArray, wArray, fmArray).zipped.map{case (vv, wv, fmv) => FundamentalDiagram(vv, fmv, fmv*( 1.0 / vv + 1.0 / wv))}
     val links = (onramps, fds, lengthArray).zipped.map{case (or, fd, len) => SimpleFreewayLink(len ,fd, or)}
-    val bcs: ProfilePolicy[FreewayBC, SimpleFreewayLink] = (betasArray, demandsArray).zipped.map{case(bp, dp) =>{
-      (bp, dp, links).zipped.map{case (bpv, dpv, link) => link -> FreewayBC(dpv, bpv)}.toMap
-    }}
-    val ics: Profile[FreewayIC, SimpleFreewayLink] = (p0Array, l0Array, links).zipped.map{
-      case (p0v, l0v, link) => link -> FreewayIC(p0v, l0v)}.toMap
+    val betaDemandPairs = betasArray.zip(demandsArray)
+    val bcs: ProfilePolicy[FreewayBC, SimpleFreewayLink] = betaDemandPairs.map{
+      case (bp, dp) => {
+        val bdLinkPairs = (bp, dp, links).zipped
+        val mappedTuples = bdLinkPairs.toList.map {
+          case (bpv, dpv, link) => {
+            link -> FreewayBC(dpv, bpv)
+          }
+        }
+        val mapValues = Map(mappedTuples:_*)
+        mapValues
+      }
+    }
+    val ics: Profile[FreewayIC, SimpleFreewayLink] = ((p0Array, l0Array, links).zipped.map{
+      case (p0v, l0v, link) => link -> FreewayIC(p0v, l0v)}).toMap
     FreewayScenario(links, ics, bcs)
   }
 }

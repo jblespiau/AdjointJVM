@@ -246,6 +246,8 @@ trait RampMeteringPolicyMaker extends BCICPolicyMaker[FreewayLink, FreewayJuncti
   //var optimizer:DifferentiableMultivariateOptimizer = new Optimizer(ConjugateGradientFormula.POLAK_RIBIERE)
   var optimizer: DifferentiableMultivariateOptimizer = new IpOptAdjointOptimizer
 
+  var initialUScale = 1.0
+
   def initialControl: ProfilePolicy[MaxRampFlux, OnRamp] = {
     val largeU = (for (_ <- 1 to T) yield {
       orderedRamps.zip(Array.fill(nOnramps)(MaxRampFlux(10000.0))).toMap
@@ -255,7 +257,9 @@ trait RampMeteringPolicyMaker extends BCICPolicyMaker[FreewayLink, FreewayJuncti
     queue.map{prof => orderedRamps.map{ramp =>
       math.min(prof(ramp), ramp.maxFlux)
     }}.map{
-      prof => orderedRamps.zip {prof.map{flux => MaxRampFlux(.001 * flux)}}.toMap
+      prof => {
+        orderedRamps.zip {prof.map{flux => MaxRampFlux(initialUScale * flux)}}.toMap
+      }
     }.toSeq
   }
 
@@ -280,7 +284,7 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
                           val _initialConditionPolicy: Profile[FreewayIC,SimpleFreewayLink])
   extends RampMeteringPolicyMaker with Adjoint[AdjointRampMeteringState] {
 
-  var R = 0.1 // tuning parameter
+  var R = 0.01 // tuning parameter
 
 
   val boundaryConditionPolicy = _boundaryConditionPolicy
@@ -303,10 +307,27 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
 
   def objective(state: AdjointRampMeteringState, control: Adjoint.Control) = {
     var sum = 0.0
-    state.getState.density.foreach{prof => prof.foreach{case (link, density) => sum+=link.length*density}}
-    state.getState.queue.foreach{prof => prof.foreach{case (ramp, queue) => sum+=queue}}
-    for (t <- 0 until T; n <- 0 until N)
-      sum+=R*maxBarrier(Left(control(N*t + n)), Left(.1 + math.min(freeway.rMaxList(n),state.queue(t)(orderedRamps(n))))).left.get
+    state.getState.density.foreach{
+      prof => {
+        prof.foreach{case (link, density) =>
+          sum+=link.length*density
+        }
+      }
+    }
+    state.getState.queue.foreach{
+      prof =>
+        prof.foreach{
+          case (ramp, queue) => sum+=queue
+        }
+    }
+    for (t <- 0 until T; n <- 0 until N) {
+      val queueLength = state.queue(t)(orderedRamps(n))
+      val rMax = freeway.rMaxList(n)
+      val ceiling = math.min(rMax,queueLength)
+      val ceilingBarrier = .1 + ceiling
+      val u = control(N*t + n)
+      sum+=R*maxBarrier(Left(u), Left(ceilingBarrier)).left.get
+    }
     sum
   }
 
@@ -461,7 +482,7 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
                 val rho = state.density(kk)(links(i))
                 val w = freeway.wList(i)
                 val rhoMax = freeway.rhoMaxList(i)
-                w*(rhoMax - rho)
+                math.min(w*(rhoMax - rho), freeway.fMaxList(i))
               }
               val d = {
                 val r = freeway.rMaxList(i)
@@ -506,7 +527,7 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
                   val rho = state.density(kk)(links(i+1))
                   val w = freeway.wList(i+1)
                   val rhoMax = freeway.rhoMaxList(i+1)
-                  w*(rhoMax - rho)
+                  math.min(w*(rhoMax - rho), freeway.fMaxList(i+1))
                 }
                 val d = {
                   val r = freeway.rMaxList(i+1)
