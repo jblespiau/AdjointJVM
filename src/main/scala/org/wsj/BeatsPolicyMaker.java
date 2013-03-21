@@ -1,4 +1,9 @@
-package org.wsj.beats;
+package org.wsj;
+
+
+import edu.berkeley.path.beats.simulator.Scenario;
+
+import java.util.Map;
 
 /**
  * Created with IntelliJ IDEA.
@@ -9,14 +14,14 @@ package org.wsj.beats;
  */
 
 
-/*
 
-public interface PolicyMaker {
+
+public interface BeatsPolicyMaker {
     public Map<Integer,Double[]> compute(
             Map<Integer, Double> initialDensity,
             Map<Integer,Double[]> splitRatios,
             Map<Integer,Double[]> rampDemands,
-            Network network
-    )
+            Scenario scenario
+    );
 }
-*/
+
