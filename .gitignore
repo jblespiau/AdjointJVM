@@ -4,3 +4,5 @@ project/target/
 .idea_modules/
 src/main/scala/org/wsj/Junk.scala
 plot.pdf
+.DS_Store
+lib/.DS_Store

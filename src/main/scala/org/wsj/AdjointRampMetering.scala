@@ -32,6 +32,7 @@ case class FreewayBC(demand: Double, splitRatio: Double) extends BoundaryConditi
 case class FreewayIC(linkCount: Double, rampCount: Double) extends InitialCondition
 
 abstract class SimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimpleFreeway(_fwLinks) {
+  var dt: Double = 1
   def simulate(u: Adjoint.Control,
                bc: ProfilePolicy[FreewayBC, SimpleFreewayLink],
                ic: Profile[FreewayIC, SimpleFreewayLink]): AdjointRampMeteringState
@@ -56,7 +57,7 @@ class WSJSimulatedFreeway(_fwLinks: Seq[SimpleFreewayLink]) extends SimulatedFre
 
     val T = bc.length
     val N = ic.size
-    val dt = 1
+
 
     // Convert the maps into arrays
     val bcDemandArray = bc.map {prof => (fwLinks.map{prof(_).demand}).toArray}.toArray
@@ -258,7 +259,7 @@ trait RampMeteringPolicyMaker extends BCICPolicyMaker[FreewayLink, FreewayJuncti
           case (ramp, queue) => sum+=queue
         }
     }
-    sum
+    sum*freeway.dt
   }
   def totalDensities(state: AdjointRampMeteringState, control: Adjoint.Control) = {
     var sum = 0.0
@@ -269,7 +270,7 @@ trait RampMeteringPolicyMaker extends BCICPolicyMaker[FreewayLink, FreewayJuncti
         }
       }
     }
-    sum
+    sum*freeway.dt
   }
 
   def linkProfileToArray[T]: (ProfilePolicy[T, SimpleFreewayLink], (T) => Double) => Array[Array[Double]] =
@@ -295,7 +296,7 @@ trait RampMeteringPolicyMaker extends BCICPolicyMaker[FreewayLink, FreewayJuncti
     val sim = freeway.simulate(uToVector(largeU), boundaryConditionPolicy, initialConditionPolicy)
     val queue = sim.queue
     queue.map{prof => orderedRamps.map{ramp =>
-      math.min(prof(ramp), ramp.maxFlux)
+      math.min(prof(ramp) / freeway.dt, ramp.maxFlux)
     }}.map{
       prof => {
         orderedRamps.zip {prof.map{flux => MaxRampFlux(initialUScale * flux)}}.toMap
@@ -332,7 +333,12 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
   val nControl = N*T
   val nState = N*(T+1)*8
 
-  val dt: Double = 1 // TODO: dt hack
+  var dt: Double = 1 // TODO: dt hack
+
+  def setDt(newDt: Double) {
+    dt = newDt
+    freeway.dt = newDt
+  }
 
   lazy val linkLengths = freeway.fwLinks.map{_.length}
 
@@ -415,7 +421,7 @@ class AdjointRampMetering( val freeway: SimulatedFreeway,
     val sln = new SparseDoubleMatrix1D(nState)
     for (t <- 0 until T+1) {
       for (n <- 0 until N) {
-        sln.setQuick(t*8*N + N*0 + n,linkLengths(n) )
+        sln.setQuick(t*8*N + N*0 + n,linkLengths(n)*dt )
         sln.setQuick(t*8*N + N*1 + n, dt )
       }
     }

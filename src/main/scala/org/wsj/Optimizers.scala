@@ -150,7 +150,9 @@ trait GradientDescentOptimizer extends DifferentiableMultivariateOptimizer with 
     new PointValuePair(u, prevCost)
   }
 
-  val convergenceChecker = new MaxIterationConvergenceChecker(getMaxEvaluations)
+  val convergenceChecker = new ConvergenceChecker[PointValuePair] {
+    def converged(p1: Int, p2: PointValuePair, p3: PointValuePair) = false
+  }
 
   def getConvergenceChecker = convergenceChecker
 }
